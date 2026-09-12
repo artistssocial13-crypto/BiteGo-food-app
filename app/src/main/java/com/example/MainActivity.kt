@@ -51,7 +51,18 @@ class MainActivity : ComponentActivity() {
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return AppViewModel(repository, notificationService) as T
+                if (modelClass.isAssignableFrom(AppViewModel::class.java)) {
+                    return AppViewModel(repository, notificationService) as T
+                }
+                if (modelClass.isAssignableFrom(AuthViewModel::class.java)) {
+                    // We need authRepository here.
+                    val authRepository = com.example.data.AuthRepositoryImpl(
+                        com.example.di.supabase,
+                        sessionManager
+                    )
+                    return AuthViewModel(authRepository) as T
+                }
+                throw IllegalArgumentException("Unknown ViewModel class")
             }
         }
 
@@ -59,19 +70,50 @@ class MainActivity : ComponentActivity() {
         setContent {
             CraveTheme {
                 val viewModel: AppViewModel = viewModel(factory = factory)
-                MainScreen(viewModel)
+                MainScreen(viewModel = viewModel, sessionManager = sessionManager, factory = factory)
             }
         }
     }
 }
 
 @Composable
-fun MainScreen(viewModel: AppViewModel) {
+fun MainScreen(
+    viewModel: AppViewModel, 
+    sessionManager: com.example.data.local.SessionManager,
+    factory: ViewModelProvider.Factory
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
     val user by viewModel.currentUser.collectAsState()
+    
+    // Auth Guard Implementation
+    val tokenState by produceState<String?>(initialValue = "LOADING") {
+        sessionManager.getTokenStream().collect { value ->
+            this.value = value
+        }
+    }
+
+    LaunchedEffect(tokenState) {
+        if (tokenState != "LOADING") {
+            if (tokenState == null) {
+                // Not authenticated, go to Login
+                if (currentDestination?.route != "com.example.ui.navigation.LoginRoute") {
+                    navController.navigate(LoginRoute) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            } else {
+                // Authenticated, if currently on login, redirect to home
+                if (currentDestination?.route == "com.example.ui.navigation.LoginRoute") {
+                    navController.navigate(HomeRoute) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            }
+        }
+    }
     
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -156,9 +198,18 @@ fun MainScreen(viewModel: AppViewModel) {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = HomeRoute,
+            startDestination = LoginRoute,
             modifier = Modifier.padding(innerPadding)
         ) {
+            composable<LoginRoute> {
+                val authViewModel: AuthViewModel = viewModel(factory = factory)
+                LoginScreen(
+                    viewModel = authViewModel,
+                    onLoginSuccess = {
+                        // The LaunchedEffect above listening to the token will automatically route to Home!
+                    }
+                )
+            }
             composable<HomeRoute> {
                 val restaurants by viewModel.restaurants.collectAsState()
                 HomeScreen(

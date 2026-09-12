@@ -119,6 +119,12 @@ dependencies {
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+  
+  implementation(platform(libs.supabase.bom))
+  implementation(libs.supabase.auth)
+  implementation(libs.supabase.postgrest)
+  implementation(libs.ktor.client.okhttp)
+
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
   implementation("com.squareup.retrofit2:converter-kotlinx-serialization:2.12.0")

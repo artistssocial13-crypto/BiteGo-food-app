@@ -32,6 +32,12 @@ class SessionManager(private val context: Context) {
         }
     }
 
+    fun getTokenStream(): Flow<String?> {
+        return context.dataStore.data.map { preferences ->
+            preferences[AUTH_TOKEN_KEY]
+        }
+    }
+
     suspend fun saveUser(user: User, token: String = "mock_supabase_token") {
         context.dataStore.edit { preferences ->
             preferences[USER_KEY] = Json.encodeToString(user)

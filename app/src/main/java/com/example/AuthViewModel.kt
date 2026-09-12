@@ -23,6 +23,33 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
+    private val _emailError = MutableStateFlow<String?>(null)
+    val emailError: StateFlow<String?> = _emailError.asStateFlow()
+
+    private val _passwordError = MutableStateFlow<String?>(null)
+    val passwordError: StateFlow<String?> = _passwordError.asStateFlow()
+
+    fun validateEmail(email: String) {
+        val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$".toRegex()
+        _emailError.value = if (email.isBlank()) {
+            "Email cannot be empty"
+        } else if (!email.matches(emailRegex)) {
+            "Invalid email format"
+        } else {
+            null
+        }
+    }
+
+    fun validatePassword(password: String) {
+        _passwordError.value = if (password.isBlank()) {
+            "Password cannot be empty"
+        } else if (password.length < 6) {
+            "Password must be at least 6 characters"
+        } else {
+            null
+        }
+    }
+
     fun signUp(email: String, password: String) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading

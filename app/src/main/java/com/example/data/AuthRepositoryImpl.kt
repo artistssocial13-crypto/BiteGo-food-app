@@ -1,40 +1,44 @@
 package com.example.data
 
 import com.example.data.local.SessionManager
-import com.example.data.remote.AuthRequest
-import com.example.data.remote.SupabaseAuthApi
 import com.example.domain.AuthRepository
 import com.example.domain.LoyaltyTier
 import com.example.domain.User
 import com.example.domain.UserRole
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.builtin.Email
 import kotlinx.coroutines.flow.firstOrNull
 
 class AuthRepositoryImpl(
-    private val api: SupabaseAuthApi,
-    private val sessionManager: SessionManager,
-    private val apiKey: String
+    private val supabaseClient: SupabaseClient,
+    private val sessionManager: SessionManager
 ) : AuthRepository {
 
     override val currentUser = sessionManager.getUserStream()
 
     override suspend fun signUp(email: String, password: String): Result<User> {
         return try {
-            val response = api.signUp(apiKey, AuthRequest(email, password))
-            if (response.isSuccessful && response.body() != null) {
-                val authResponse = response.body()!!
+            supabaseClient.auth.signUpWith(Email) {
+                this.email = email
+                this.password = password
+            }
+            // Supabase auth handles session storage internally, but we'll map to our user
+            val authUser = supabaseClient.auth.currentUserOrNull()
+            if (authUser != null) {
                 val user = User(
-                    id = authResponse.user.id,
+                    id = authUser.id,
                     name = email.substringBefore("@"),
-                    email = authResponse.user.email,
+                    email = authUser.email ?: email,
                     role = UserRole.CUSTOMER,
                     loyaltyPoints = 0,
                     lifetimePoints = 0,
                     loyaltyTier = LoyaltyTier.BRONZE
                 )
-                sessionManager.saveUser(user, authResponse.accessToken)
+                sessionManager.saveUser(user, supabaseClient.auth.currentAccessTokenOrNull() ?: "")
                 Result.success(user)
             } else {
-                Result.failure(Exception(response.errorBody()?.string() ?: "Sign up failed"))
+                Result.failure(Exception("Sign up completed but user is null"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -43,30 +47,30 @@ class AuthRepositoryImpl(
 
     override suspend fun signIn(email: String, password: String): Result<User> {
         return try {
-            val response = api.signIn(apiKey, AuthRequest(email, password))
-            if (response.isSuccessful && response.body() != null) {
-                val authResponse = response.body()!!
-                
-                // Keep the current user details from local if it exists and matches ID
+            supabaseClient.auth.signInWith(Email) {
+                this.email = email
+                this.password = password
+            }
+            val authUser = supabaseClient.auth.currentUserOrNull()
+            if (authUser != null) {
                 val existingUser = sessionManager.getUserStream().firstOrNull()
-                val user = if (existingUser != null && existingUser.id == authResponse.user.id) {
+                val user = if (existingUser != null && existingUser.id == authUser.id) {
                     existingUser
                 } else {
                     User(
-                        id = authResponse.user.id,
+                        id = authUser.id,
                         name = email.substringBefore("@"),
-                        email = authResponse.user.email,
+                        email = authUser.email ?: email,
                         role = UserRole.CUSTOMER,
                         loyaltyPoints = 0,
                         lifetimePoints = 0,
                         loyaltyTier = LoyaltyTier.BRONZE
                     )
                 }
-                
-                sessionManager.saveUser(user, authResponse.accessToken)
+                sessionManager.saveUser(user, supabaseClient.auth.currentAccessTokenOrNull() ?: "")
                 Result.success(user)
             } else {
-                Result.failure(Exception(response.errorBody()?.string() ?: "Sign in failed"))
+                Result.failure(Exception("Sign in completed but user is null"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -75,9 +79,7 @@ class AuthRepositoryImpl(
 
     override suspend fun signOut(): Result<Unit> {
         return try {
-            // Need token to pass to logout. The simplest implementation:
-            // Assuming sessionManager handles the token, though currently it just saves to dataStore.
-            // A more robust implementation would read the token. For now, we just clear session.
+            supabaseClient.auth.signOut()
             sessionManager.clearSession()
             Result.success(Unit)
         } catch (e: Exception) {
