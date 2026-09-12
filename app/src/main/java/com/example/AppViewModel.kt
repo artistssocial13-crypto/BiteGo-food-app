@@ -7,7 +7,10 @@ import com.example.domain.CraveRepository
 import com.example.domain.MenuItem
 import com.example.domain.OrderStatus
 import com.example.domain.PromoCode
+import com.example.domain.Restaurant
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -22,6 +25,12 @@ class AppViewModel(
     val orders = repository.orders.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     val reviews = repository.reviews.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     val currentUser = repository.currentUser.stateIn(viewModelScope, SharingStarted.Lazily, null)
+
+    private val _isUploadingAvatar = MutableStateFlow(false)
+    val isUploadingAvatar = _isUploadingAvatar.asStateFlow()
+
+    private val _isUploadingBanner = MutableStateFlow(false)
+    val isUploadingBanner = _isUploadingBanner.asStateFlow()
 
     fun addToCart(menuItem: MenuItem, quantity: Int = 1) {
         viewModelScope.launch {
@@ -68,6 +77,41 @@ class AppViewModel(
     }
 
     fun submitReview(targetId: String, targetType: com.example.domain.TargetType, rating: Int, comment: String) {
-        repository.addReview(targetId, targetType, rating, comment)
+        viewModelScope.launch {
+            repository.addReview(targetId, targetType, rating, comment)
+        }
+    }
+
+    fun uploadAvatar(imageBytes: ByteArray, onComplete: (Result<String>) -> Unit = {}) {
+        viewModelScope.launch {
+            _isUploadingAvatar.value = true
+            val result = repository.uploadAvatar(imageBytes)
+            _isUploadingAvatar.value = false
+            onComplete(result)
+        }
+    }
+
+    fun uploadRestaurantBanner(restaurantId: String, imageBytes: ByteArray, onComplete: (Result<String>) -> Unit = {}) {
+        viewModelScope.launch {
+            _isUploadingBanner.value = true
+            val result = repository.uploadRestaurantBanner(restaurantId, imageBytes)
+            _isUploadingBanner.value = false
+            onComplete(result)
+        }
+    }
+
+    fun addRestaurant(
+        name: String,
+        deliveryTime: String,
+        categories: List<String>,
+        imageBytes: ByteArray?,
+        onComplete: (Result<Restaurant>) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            _isUploadingBanner.value = true
+            val result = repository.addRestaurantWithBanner(name, deliveryTime, categories, imageBytes)
+            _isUploadingBanner.value = false
+            onComplete(result)
+        }
     }
 }

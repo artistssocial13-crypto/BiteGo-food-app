@@ -86,4 +86,13 @@ class AuthRepositoryImpl(
             Result.failure(e)
         }
     }
+
+    override suspend fun resetPassword(email: String): Result<Unit> {
+        return try {
+            supabaseClient.auth.resetPasswordForEmail(email)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

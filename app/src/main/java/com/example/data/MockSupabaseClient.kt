@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.firstOrNull
 import java.util.UUID
 
 import com.example.data.local.SessionManager
@@ -44,30 +45,8 @@ class MockSupabaseClient(private val sessionManager: SessionManager) {
     private val _promoCodes = MutableStateFlow<List<PromoCode>>(emptyList())
     val promoCodes: StateFlow<List<PromoCode>> = _promoCodes.asStateFlow()
     
-    private val _currentUser = MutableStateFlow<User?>(null)
-    val currentUser = _currentUser.asStateFlow()
-
     init {
         seedData()
-        scope.launch {
-            sessionManager.getUserStream().collectLatest { user ->
-                if (user != null) {
-                    _currentUser.value = user
-                } else {
-                    val defaultUser = User(
-                        id = "user_1", 
-                        name = "Guest", 
-                        email = "guest@example.com", 
-                        role = UserRole.CUSTOMER,
-                        loyaltyPoints = 500,
-                        lifetimePoints = 500,
-                        loyaltyTier = com.example.domain.LoyaltyTier.BRONZE
-                    )
-                    _currentUser.value = defaultUser
-                    sessionManager.saveUser(defaultUser)
-                }
-            }
-        }
     }
 
     private fun seedData() {
@@ -136,6 +115,12 @@ class MockSupabaseClient(private val sessionManager: SessionManager) {
         _restaurants.update { it + restaurant }
     }
 
+    fun updateRestaurantBanner(restaurantId: String, imageUrl: String) {
+        _restaurants.update { list ->
+            list.map { if (it.id == restaurantId) it.copy(imageUrl = imageUrl) else it }
+        }
+    }
+
     fun updateOrderStatus(orderId: String, status: OrderStatus) {
         _orders.update { current ->
             current.map { if (it.id == orderId) it.copy(status = status) else it }
@@ -146,7 +131,7 @@ class MockSupabaseClient(private val sessionManager: SessionManager) {
         _orders.update { listOf(order) + it }
         
         scope.launch {
-            val user = _currentUser.value
+            val user = sessionManager.getUserStream().firstOrNull()
             if (user != null) {
                 val newLifetime = user.lifetimePoints + order.pointsEarned
                 val newPoints = user.loyaltyPoints - pointsRedeemed + order.pointsEarned
@@ -164,7 +149,7 @@ class MockSupabaseClient(private val sessionManager: SessionManager) {
     
     fun toggleAdminRole() {
         scope.launch {
-            val user = _currentUser.value
+            val user = sessionManager.getUserStream().firstOrNull()
             if (user != null) {
                 val updatedUser = user.copy(role = if (user.role == UserRole.ADMIN) UserRole.CUSTOMER else UserRole.ADMIN) 
                 sessionManager.saveUser(updatedUser)
@@ -174,7 +159,7 @@ class MockSupabaseClient(private val sessionManager: SessionManager) {
     
     fun updateProfile(address: String, payment: String) {
         scope.launch {
-            val user = _currentUser.value
+            val user = sessionManager.getUserStream().firstOrNull()
             if (user != null) {
                 val updatedUser = user.copy(deliveryAddress = address, paymentMethod = payment)
                 sessionManager.saveUser(updatedUser)

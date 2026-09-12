@@ -45,7 +45,8 @@ class MainActivity : ComponentActivity() {
         val db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "crave_db").build()
         val sessionManager = com.example.data.local.SessionManager(applicationContext)
         val supabase = MockSupabaseClient(sessionManager)
-        val repository = CraveRepository(supabase, db.cartDao())
+        val storageService = com.example.data.remote.SupabaseStorageService(com.example.di.supabase)
+        val repository = CraveRepository(supabase, db.cartDao(), sessionManager, storageService)
         val notificationService = com.example.notifications.NotificationService(applicationContext)
         
         val factory = object : ViewModelProvider.Factory {
@@ -253,18 +254,33 @@ fun MainScreen(
             }
             composable<ProfileRoute> {
                 val orders by viewModel.orders.collectAsState()
+                val isUploadingAvatar by viewModel.isUploadingAvatar.collectAsState()
+                val authViewModel: AuthViewModel = viewModel(factory = factory)
                 ProfileScreen(
                     user = user,
                     orders = orders,
+                    isUploadingAvatar = isUploadingAvatar,
+                    onUploadAvatar = { bytes -> viewModel.uploadAvatar(bytes) },
                     onToggleAdmin = { viewModel.toggleAdmin() },
-                    onUpdateProfile = { address, payment -> viewModel.updateProfile(address, payment) }
+                    onUpdateProfile = { address, payment -> viewModel.updateProfile(address, payment) },
+                    onLogout = { authViewModel.signOut() }
                 )
             }
             composable<AdminRoute> {
                 val orders by viewModel.orders.collectAsState()
+                val restaurants by viewModel.restaurants.collectAsState()
+                val isUploadingBanner by viewModel.isUploadingBanner.collectAsState()
                 AdminDashboardScreen(
                     orders = orders,
-                    onUpdateOrderStatus = { id, status -> viewModel.updateOrderStatus(id, status) }
+                    restaurants = restaurants,
+                    isUploadingBanner = isUploadingBanner,
+                    onUpdateOrderStatus = { id, status -> viewModel.updateOrderStatus(id, status) },
+                    onUploadBanner = { restaurantId, bytes ->
+                        viewModel.uploadRestaurantBanner(restaurantId, bytes)
+                    },
+                    onAddRestaurant = { name, time, categories, bytes ->
+                        viewModel.addRestaurant(name, time, categories, bytes)
+                    }
                 )
             }
         }

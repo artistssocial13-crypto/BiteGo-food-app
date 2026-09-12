@@ -14,6 +14,7 @@ sealed class AuthState {
     object Loading : AuthState()
     data class Success(val user: User) : AuthState()
     data class Error(val message: String) : AuthState()
+    object PasswordResetSent : AuthState()
 }
 
 class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
@@ -84,5 +85,21 @@ class AuthViewModel(private val authRepository: AuthRepository) : ViewModel() {
                 _authState.value = AuthState.Error(error.message ?: "Sign out failed")
             }
         }
+    }
+
+    fun resetPassword(email: String) {
+        viewModelScope.launch {
+            _authState.value = AuthState.Loading
+            val result = authRepository.resetPassword(email)
+            result.onSuccess {
+                _authState.value = AuthState.PasswordResetSent
+            }.onFailure { error ->
+                _authState.value = AuthState.Error(error.message ?: "Password reset failed")
+            }
+        }
+    }
+    
+    fun resetAuthState() {
+        _authState.value = AuthState.Idle
     }
 }

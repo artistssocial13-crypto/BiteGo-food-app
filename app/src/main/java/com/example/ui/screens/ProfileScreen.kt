@@ -1,13 +1,21 @@
 package com.example.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -15,12 +23,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import coil.compose.AsyncImage
 import com.example.domain.LoyaltyTier
 import com.example.domain.Order
 import com.example.domain.OrderStatus
@@ -35,10 +46,25 @@ import com.example.ui.theme.WarmOrange
 fun ProfileScreen(
     user: User?,
     orders: List<Order>,
+    isUploadingAvatar: Boolean = false,
+    onUploadAvatar: (ByteArray) -> Unit = {},
     onToggleAdmin: () -> Unit,
-    onUpdateProfile: (String, String) -> Unit = { _, _ -> }
+    onUpdateProfile: (String, String) -> Unit = { _, _ -> },
+    onLogout: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     var showEditProfile by remember { mutableStateOf(false) }
+
+    val avatarPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            if (bytes != null && bytes.isNotEmpty()) {
+                onUploadAvatar(bytes)
+            }
+        }
+    }
     
     if (showEditProfile && user != null) {
         var addressInput by remember { mutableStateOf(user.deliveryAddress ?: "") }
@@ -109,8 +135,104 @@ fun ProfileScreen(
                             modifier = Modifier.padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.size(64.dp), tint = WarmOrange)
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(96.dp)
+                                    .clickable {
+                                        avatarPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (!user.profilePictureUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = user.profilePictureUrl,
+                                        contentDescription = "User Avatar",
+                                        modifier = Modifier
+                                            .size(96.dp)
+                                            .clip(CircleShape)
+                                            .border(2.dp, WarmOrange, CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(96.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Person,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(56.dp),
+                                            tint = WarmOrange
+                                        )
+                                    }
+                                }
+
+                                if (isUploadingAvatar) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(96.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.5f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(36.dp),
+                                            color = WarmOrange
+                                        )
+                                    }
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        avatarPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .align(Alignment.BottomEnd)
+                                        .clip(CircleShape)
+                                        .background(WarmOrange)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PhotoCamera,
+                                        contentDescription = "Upload Avatar",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            TextButton(
+                                onClick = {
+                                    avatarPickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                                enabled = !isUploadingAvatar
+                            ) {
+                                Icon(
+                                    Icons.Filled.CloudUpload,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = WarmOrange
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    if (isUploadingAvatar) "Uploading to Supabase..." else "Upload Avatar (Supabase Storage)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = WarmOrange
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(user.name, style = MaterialTheme.typography.titleLarge)
                             Text(user.email, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                             
@@ -145,6 +267,16 @@ fun ProfileScreen(
                                 ) {
                                     Text("Toggle Admin Mode", color = MaterialTheme.colorScheme.onSurface)
                                 }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            OutlinedButton(
+                                onClick = onLogout,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
+                            ) {
+                                Text("Logout")
                             }
                         }
                     }
